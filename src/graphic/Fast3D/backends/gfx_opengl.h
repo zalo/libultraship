@@ -18,7 +18,12 @@
 #include <GL/glew.h>
 #elif USE_OPENGLES
 #include <SDL2/SDL.h>
+#ifdef __EMSCRIPTEN__
 #include <GLES3/gl3.h>
+#include <GLES3/gl3ext.h>
+#else
+#include <GLES3/gl3.h>
+#endif
 #else
 #include <SDL2/SDL.h>
 #define GL_GLEXT_PROTOTYPES 1
