@@ -32,6 +32,7 @@
 #include "window/gui/Gui.h"
 #include "resource/ResourceManager.h"
 #include "utils/Utils.h"
+#include "utils/StringHelper.h"
 #include "Context.h"
 #include "libultraship/bridge.h"
 
@@ -451,7 +452,7 @@ bool Interpreter::TextureCacheLookup(int i, const TextureCacheKey& key) {
 }
 
 std::string Interpreter::GetBaseTexturePath(const std::string& path) {
-    if (path.starts_with(Ship::IResource::gAltAssetPrefix)) {
+    if (StringHelper::StartsWith(path, Ship::IResource::gAltAssetPrefix)) {
         return path.substr(Ship::IResource::gAltAssetPrefix.length());
     }
 

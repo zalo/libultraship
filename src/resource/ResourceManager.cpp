@@ -103,7 +103,7 @@ std::shared_ptr<IResource> ResourceManager::LoadResourceProcess(const ResourceId
 
     // Attempt to load the alternate version of the asset, if we fail then we continue trying to load the standard
     // asset.
-    if (!loadExact && mAltAssetsEnabled && !identifier.Path.starts_with(IResource::gAltAssetPrefix)) {
+    if (!loadExact && mAltAssetsEnabled && !StringHelper::StartsWith(identifier.Path, IResource::gAltAssetPrefix)) {
         const auto altPath = IResource::gAltAssetPrefix + identifier.Path;
         auto altResource = LoadResourceProcess({ altPath, identifier.Owner, identifier.Parent }, loadExact, initData);
 
@@ -122,7 +122,7 @@ std::shared_ptr<IResource> ResourceManager::LoadResourceProcess(const ResourceId
 
     // Check for resource load errors which can indicate an alternate asset.
     // If we are attempting to load an alternate asset, we can return null
-    if (!loadExact && mAltAssetsEnabled && identifier.Path.starts_with(IResource::gAltAssetPrefix)) {
+    if (!loadExact && mAltAssetsEnabled && StringHelper::StartsWith(identifier.Path, IResource::gAltAssetPrefix)) {
         if (std::holds_alternative<ResourceLoadError>(cacheLine)) {
             try {
                 // If we have attempted to cache an alternate asset, but failed, we return nullptr and rely on the
@@ -229,7 +229,7 @@ std::shared_ptr<IResource> ResourceManager::LoadResource(const std::string& file
 
 std::variant<ResourceManager::ResourceLoadError, std::shared_ptr<IResource>>
 ResourceManager::CheckCache(const ResourceIdentifier& identifier, bool loadExact) {
-    if (!loadExact && mAltAssetsEnabled && !identifier.Path.starts_with(IResource::gAltAssetPrefix)) {
+    if (!loadExact && mAltAssetsEnabled && !StringHelper::StartsWith(identifier.Path, IResource::gAltAssetPrefix)) {
         const auto altPath = IResource::gAltAssetPrefix + identifier.Path;
         auto altCacheResult = CheckCache({ altPath, identifier.Owner, identifier.Parent }, loadExact);
 
