@@ -88,7 +88,13 @@ struct ColorCombinerKey {
     uint64_t options;
 
 #ifdef __cplusplus
-    auto operator<=>(const ColorCombinerKey&) const = default;
+    bool operator<(const ColorCombinerKey& other) const {
+        if (combine_mode != other.combine_mode) return combine_mode < other.combine_mode;
+        return options < other.options;
+    }
+    bool operator==(const ColorCombinerKey& other) const {
+        return combine_mode == other.combine_mode && options == other.options;
+    }
 #endif
 };
 
@@ -175,7 +181,14 @@ struct TextureCacheKey {
     uint8_t palette_index;
     uint32_t size_bytes;
 
-    bool operator==(const TextureCacheKey&) const noexcept = default;
+    bool operator==(const TextureCacheKey& other) const noexcept {
+        return texture_addr == other.texture_addr &&
+               palette_addrs[0] == other.palette_addrs[0] &&
+               palette_addrs[1] == other.palette_addrs[1] &&
+               fmt == other.fmt && siz == other.siz &&
+               palette_index == other.palette_index &&
+               size_bytes == other.size_bytes;
+    }
 
     struct Hasher {
         size_t operator()(const TextureCacheKey& key) const noexcept {
