@@ -52,6 +52,7 @@ void ResourceManager::Init(const std::vector<std::string>& archivePaths,
     GetArchiveManager()->Init(archivePaths, validHashes);
 
     // the extra `- 1` is because we reserve an extra thread for spdlog
+#ifndef __EMSCRIPTEN__
     size_t threadCount = std::max(1, (int32_t)(std::thread::hardware_concurrency() - reservedThreadCount - 1));
     mThreadPool = std::make_shared<BS::thread_pool>(threadCount);
 
@@ -59,6 +60,7 @@ void ResourceManager::Init(const std::vector<std::string>& archivePaths,
         // Nothing ever unpauses the thread pool since nothing will ever try to load the archive again.
         mThreadPool->pause();
     }
+#endif
 }
 
 ResourceManager::~ResourceManager() {
@@ -200,11 +202,17 @@ ResourceManager::LoadResourceAsync(const ResourceIdentifier& identifier, bool lo
         return promise->get_future().share();
     }
 
+#ifdef __EMSCRIPTEN__
+    auto promise = std::make_shared<std::promise<std::shared_ptr<IResource>>>();
+    promise->set_value(LoadResourceProcess(identifier, loadExact, initData));
+    return promise->get_future().share();
+#else
     return mThreadPool->submit_task(
         [this, identifier, loadExact, initData]() -> std::shared_ptr<IResource> {
             return LoadResourceProcess(identifier, loadExact, initData);
         },
         priority);
+#endif
 }
 
 std::shared_future<std::shared_ptr<IResource>>
@@ -317,11 +325,17 @@ ResourceManager::LoadResourcesProcess(const ResourceFilter& filter) {
 
 std::shared_future<std::shared_ptr<std::vector<std::shared_ptr<IResource>>>>
 ResourceManager::LoadResourcesAsync(const ResourceFilter& filter, BS::priority_t priority) {
+#ifdef __EMSCRIPTEN__
+    auto promise = std::make_shared<std::promise<std::shared_ptr<std::vector<std::shared_ptr<IResource>>>>>();
+    promise->set_value(LoadResourcesProcess(filter));
+    return promise->get_future().share();
+#else
     return mThreadPool->submit_task(
         [this, filter]() -> std::shared_ptr<std::vector<std::shared_ptr<IResource>>> {
             return LoadResourcesProcess(filter);
         },
         priority);
+#endif
 }
 
 std::shared_future<std::shared_ptr<std::vector<std::shared_ptr<IResource>>>>
@@ -338,7 +352,7 @@ std::shared_ptr<std::vector<std::shared_ptr<IResource>>> ResourceManager::LoadRe
 }
 
 void ResourceManager::DirtyResources(const ResourceFilter& filter) {
-    mThreadPool->submit_task([this, filter]() -> void {
+    auto dirtyTask = [this, filter]() -> void {
         auto list = GetArchiveManager()->ListFiles(filter.IncludeMasks, filter.ExcludeMasks);
 
         for (const auto& key : *list.get()) {
@@ -350,7 +364,12 @@ void ResourceManager::DirtyResources(const ResourceFilter& filter) {
                 UnloadResource({ key, filter.Owner, filter.Parent });
             }
         }
-    });
+    };
+#ifdef __EMSCRIPTEN__
+    dirtyTask();
+#else
+    mThreadPool->submit_task(dirtyTask);
+#endif
 }
 
 void ResourceManager::DirtyResources(const std::string& searchMask) {
@@ -362,7 +381,11 @@ void ResourceManager::UnloadResourcesAsync(const std::string& searchMask, BS::pr
 }
 
 void ResourceManager::UnloadResourcesAsync(const ResourceFilter& filter, BS::priority_t priority) {
+#ifdef __EMSCRIPTEN__
+    UnloadResourcesProcess(filter);
+#else
     mThreadPool->submit_task([this, filter]() -> void { UnloadResourcesProcess(filter); }, priority);
+#endif
 }
 
 void ResourceManager::UnloadResources(const std::string& searchMask) {

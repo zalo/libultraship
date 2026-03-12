@@ -23,6 +23,12 @@
 #include <SDL.h>
 #include "fast/backends/gfx_metal.h"
 #include "ship/utils/macUtils.h"
+#elif defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#include <SDL2/SDL.h>
+#define GL_GLEXT_PROTOTYPES 1
+#include <SDL2/SDL_opengles2.h>
+#include <GLES3/gl3.h>
 #else
 #include <SDL2/SDL.h>
 #define GL_GLEXT_PROTOTYPES 1
@@ -314,7 +320,7 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
     mWindowWidth = width;
     mWindowHeight = height;
 
-#if SDL_VERSION_ATLEAST(2, 24, 0)
+#if SDL_VERSION_ATLEAST(2, 24, 0) && !defined(__EMSCRIPTEN__)
     /* fix DPI scaling issues on Windows */
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
 #endif
@@ -337,7 +343,12 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
         SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
     }
 
-#if defined(__APPLE__)
+#if defined(__EMSCRIPTEN__)
+    // WebGL2 context (maps to OpenGL ES 3.0)
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#elif defined(__APPLE__)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
@@ -642,6 +653,10 @@ static uint64_t qpc_to_100ns(uint64_t qpc) {
 }
 
 void GfxWindowBackendSDL2::SyncFramerateWithTime() const {
+#ifdef __EMSCRIPTEN__
+    // In Emscripten, the browser controls frame timing via requestAnimationFrame
+    return;
+#endif
     uint64_t t = qpc_to_100ns(SDL_GetPerformanceCounter());
 
     const int64_t next = previous_time + 10 * FRAME_INTERVAL_US_NUMERATOR / FRAME_INTERVAL_US_DENOMINATOR;

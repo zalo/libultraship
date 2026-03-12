@@ -46,10 +46,10 @@ target_include_directories(libultraship
 
 #=================== Linking ===================
 if(INCLUDE_MPQ_SUPPORT)
-    if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        target_link_libraries(libultraship PUBLIC "$<LINK_LIBRARY:WHOLE_ARCHIVE,storm>")
-    else()
+    if (CMAKE_SYSTEM_NAME STREQUAL "Windows" OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Emscripten" OR EMSCRIPTEN)
         target_link_libraries(libultraship PUBLIC storm)
+    else()
+        target_link_libraries(libultraship PUBLIC "$<LINK_LIBRARY:WHOLE_ARCHIVE,storm>")
     endif()
 endif()
 
@@ -63,17 +63,79 @@ if (GFX_DEBUG_DISASSEMBLER)
     target_link_libraries(libultraship PRIVATE libgfxd)
 endif()
 
-find_package(libzip REQUIRED)
-target_link_libraries(libultraship PRIVATE libzip::zip)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" AND NOT EMSCRIPTEN)
+    find_package(libzip REQUIRED)
+    target_link_libraries(libultraship PRIVATE libzip::zip)
 
-find_package(nlohmann_json REQUIRED)
-target_link_libraries(libultraship PUBLIC nlohmann_json::nlohmann_json)
+    find_package(nlohmann_json REQUIRED)
+    target_link_libraries(libultraship PUBLIC nlohmann_json::nlohmann_json)
 
-find_package(tinyxml2 REQUIRED)
-target_link_libraries(libultraship PUBLIC tinyxml2::tinyxml2)
+    find_package(tinyxml2 REQUIRED)
+    target_link_libraries(libultraship PUBLIC tinyxml2::tinyxml2)
 
-find_package(spdlog REQUIRED)
-target_link_libraries(libultraship PUBLIC spdlog::spdlog)
+    find_package(spdlog REQUIRED)
+    target_link_libraries(libultraship PUBLIC spdlog::spdlog)
+else()
+    # For Emscripten, we use FetchContent or the ports system
+    # nlohmann_json, tinyxml2, spdlog should be built from source
+    find_package(nlohmann_json QUIET)
+    if(NOT nlohmann_json_FOUND)
+        include(FetchContent)
+        FetchContent_Declare(
+            nlohmann_json
+            GIT_REPOSITORY https://github.com/nlohmann/json.git
+            GIT_TAG v3.11.3
+        )
+        FetchContent_MakeAvailable(nlohmann_json)
+    endif()
+    target_link_libraries(libultraship PUBLIC nlohmann_json::nlohmann_json)
+
+    find_package(tinyxml2 QUIET)
+    if(NOT tinyxml2_FOUND)
+        FetchContent_Declare(
+            tinyxml2
+            GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
+            GIT_TAG 10.0.0
+        )
+        set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(tinyxml2)
+    endif()
+    target_link_libraries(libultraship PUBLIC tinyxml2::tinyxml2)
+
+    find_package(spdlog QUIET)
+    if(NOT spdlog_FOUND)
+        FetchContent_Declare(
+            spdlog
+            GIT_REPOSITORY https://github.com/gabime/spdlog.git
+            GIT_TAG v1.13.0
+        )
+        FetchContent_MakeAvailable(spdlog)
+    endif()
+    target_link_libraries(libultraship PUBLIC spdlog::spdlog)
+
+    find_package(libzip QUIET)
+    if(NOT libzip_FOUND)
+        FetchContent_Declare(
+            libzip
+            GIT_REPOSITORY https://github.com/nih-at/libzip.git
+            GIT_TAG v1.10.1
+        )
+        set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+        set(BUILD_REGRESS OFF CACHE BOOL "" FORCE)
+        set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(BUILD_DOC OFF CACHE BOOL "" FORCE)
+        set(ENABLE_BZIP2 OFF CACHE BOOL "" FORCE)
+        set(ENABLE_LZMA OFF CACHE BOOL "" FORCE)
+        set(ENABLE_ZSTD OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(libzip)
+    endif()
+    # PUBLIC because O2rArchive.h includes zip.h
+    target_link_libraries(libultraship PUBLIC libzip::zip)
+
+    # Add Emscripten compile flags
+    target_compile_options(libultraship PUBLIC -sUSE_SDL=2 -sUSE_ZLIB=1)
+    target_link_options(libultraship PUBLIC -sUSE_SDL=2 -sUSE_ZLIB=1)
+endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -95,7 +157,9 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
 endif()
 
 if (USE_OPENGLES)
-    if (CMAKE_SYSTEM_NAME STREQUAL "Android")
+    if (CMAKE_SYSTEM_NAME STREQUAL "Emscripten" OR EMSCRIPTEN)
+        # Emscripten provides GLES via WebGL, no library linking needed
+    elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
         find_library(OPENGLES_LIBRARY GLESv3)
         target_link_libraries(libultraship PRIVATE GLESv3)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
@@ -170,6 +234,14 @@ if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
             XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
         )
     endif()
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten" OR EMSCRIPTEN)
+    target_compile_definitions(libultraship PRIVATE
+        ENABLE_OPENGL
+        USE_OPENGLES
+        $<$<CONFIG:Debug>:_DEBUG>
+        $<$<NOT:$<CONFIG:Debug>>:NDEBUG>
+        SPDLOG_ACTIVE_LEVEL=${SPDLOG_MIN_CUTOFF}
+    )
 else()
     target_compile_definitions(libultraship PRIVATE
         ENABLE_OPENGL

@@ -50,6 +50,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     include(cmake/dependencies/linux.cmake)
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten" OR EMSCRIPTEN)
+    include(cmake/dependencies/emscripten.cmake OPTIONAL)
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
     include(cmake/dependencies/openbsd.cmake)
 endif()
