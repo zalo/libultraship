@@ -113,6 +113,19 @@ else()
     endif()
     target_link_libraries(libultraship PUBLIC spdlog::spdlog)
 
+    # Pre-build Emscripten's zlib port so find_package(ZLIB) succeeds for libzip.
+    # embuilder builds the port and places headers/libs in the sysroot cache.
+    execute_process(
+        COMMAND embuilder build zlib
+        RESULT_VARIABLE _embuilder_result
+    )
+    if(NOT _embuilder_result EQUAL 0)
+        message(WARNING "embuilder build zlib failed (${_embuilder_result}), trying to continue anyway")
+    endif()
+    # Point CMake at Emscripten's sysroot so find_package(ZLIB) finds the port
+    set(ZLIB_ROOT "$ENV{EMSDK}/upstream/emscripten/cache/sysroot" CACHE PATH "" FORCE)
+    find_package(ZLIB REQUIRED)
+
     find_package(libzip QUIET)
     if(NOT libzip_FOUND)
         FetchContent_Declare(
