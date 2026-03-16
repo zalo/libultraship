@@ -18,6 +18,9 @@
 
 #include "libultraship/window/gui/GfxDebuggerWindow.h"
 #include "fast/Fast3dWindow.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #ifdef __APPLE__
 #include <SDL_hints.h>
 #include <SDL_video.h>
@@ -291,15 +294,23 @@ void Gui::HandleWindowEvents(WindowEvent event) {
 #if defined(__ANDROID__) || defined(__IOS__)
             Mobile::ImGuiProcessEvent(mImGuiIo->WantTextInput);
 #elif defined(__EMSCRIPTEN__)
-            // Show/hide mobile keyboard when ImGui text input is focused
+            // Show/hide mobile keyboard via hidden input element
+            // (SDL_StartTextInput is not implemented in Emscripten's SDL2 port)
             {
                 static bool sShowingKeyboard = false;
                 if (mImGuiIo->WantTextInput && !sShowingKeyboard) {
                     sShowingKeyboard = true;
-                    SDL_StartTextInput();
+                    EM_ASM({
+                        var inp = document.getElementById('mobile-keyboard-input');
+                        if (inp) { inp.focus(); inp.click(); }
+                    });
                 } else if (!mImGuiIo->WantTextInput && sShowingKeyboard) {
                     sShowingKeyboard = false;
-                    SDL_StopTextInput();
+                    EM_ASM({
+                        var inp = document.getElementById('mobile-keyboard-input');
+                        if (inp) { inp.blur(); }
+                        document.getElementById('canvas').focus();
+                    });
                 }
             }
 #endif
