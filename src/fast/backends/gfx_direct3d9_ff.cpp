@@ -44,6 +44,7 @@
 #include "fast/backends/gfx_direct3d9_ff.h"
 #include "fast/interpreter.h"
 #include "ship/Context.h"
+#include "ship/config/ConsoleVariable.h"
 #include "ship/window/Window.h"
 #include "ship/window/gui/Gui.h"
 #include "spdlog/spdlog.h"
