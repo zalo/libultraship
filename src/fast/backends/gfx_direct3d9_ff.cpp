@@ -95,6 +95,13 @@ GfxRenderingAPIDX9FF::GfxRenderingAPIDX9FF(GfxWindowBackendDXGI* windowBackend)
     : mWindowBackend(windowBackend) {}
 
 GfxRenderingAPIDX9FF::~GfxRenderingAPIDX9FF() {
+    // Shut down ImGui D3D9 backend BEFORE releasing the device.
+    // Window::~Window() also calls ShutDownImGui, but by then mRenderingApi is already deleted.
+    // We guard against double-shutdown in Gui::ShutDownImGui via BackendRendererUserData check.
+    if (ImGui::GetCurrentContext() && ImGui::GetIO().BackendRendererUserData != nullptr) {
+        ImGui_ImplDX9_Shutdown();
+    }
+
     if (mVertexBuffer) { mVertexBuffer->Release(); mVertexBuffer = nullptr; }
     for (auto& tex : mTextures) {
         if (tex.texture) { tex.texture->Release(); tex.texture = nullptr; }
@@ -151,7 +158,7 @@ void GfxRenderingAPIDX9FF::Init() {
     pp.BackBufferHeight     = h;
     pp.EnableAutoDepthStencil = TRUE;
     pp.AutoDepthStencilFormat = D3DFMT_D24S8;
-    pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+    pp.PresentationInterval = D3DPRESENT_INTERVAL_ONE; // VSync on — limits to monitor refresh rate
     pp.hDeviceWindow        = hwnd;
 
     HRESULT hr = mD3D->CreateDevice(
@@ -193,16 +200,22 @@ void GfxRenderingAPIDX9FF::Init() {
 void GfxRenderingAPIDX9FF::ResetDeviceState() {
     if (!mDevice) return;
 
-    // Enable T&L lighting so SetLight() calls are honoured by RTX Remix.
-    mDevice->SetRenderState(D3DRS_LIGHTING,              TRUE);
+    // Lighting mode:
+    //   Default (RTX_REMIX_LIGHTING=0): D3D9 T&L disabled — use pre-computed CPU vertex colors
+    //     (Gouraud shading computed by the interpreter). Game looks correct immediately.
+    //   RTX Remix mode (RTX_REMIX_LIGHTING=1): D3D9 T&L enabled — scene lights forwarded via
+    //     SetLight() so RTX Remix can path-trace them. Game may look dark without Remix active.
+    bool rtxLighting = Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger(
+        "gRTXRemixHardwareLighting", 0) != 0;
+    mDevice->SetRenderState(D3DRS_LIGHTING,              rtxLighting ? TRUE : FALSE);
     mDevice->SetRenderState(D3DRS_NORMALIZENORMALS,      TRUE);
     mDevice->SetRenderState(D3DRS_SPECULARENABLE,        FALSE);
     mDevice->SetRenderState(D3DRS_AMBIENT,               D3DCOLOR_ARGB(255, 0, 0, 0));
 
-    // Vertex colour source — diffuse from vertex, ambient from material.
+    // Vertex colour provides both diffuse and ambient when T&L is on.
     mDevice->SetRenderState(D3DRS_COLORVERTEX,           TRUE);
     mDevice->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
-    mDevice->SetRenderState(D3DRS_AMBIENTMATERIALSOURCE, D3DMCS_MATERIAL);
+    mDevice->SetRenderState(D3DRS_AMBIENTMATERIALSOURCE, D3DMCS_COLOR1);
 
     // Alpha blending — set up src/dst once; enable/disable per draw.
     mDevice->SetRenderState(D3DRS_SRCBLEND,              D3DBLEND_SRCALPHA);
@@ -237,7 +250,11 @@ void GfxRenderingAPIDX9FF::ResetDeviceState() {
 // Frame control
 // ---------------------------------------------------------------------------
 void GfxRenderingAPIDX9FF::StartFrame() {
-    if (mDevice) mDevice->BeginScene();
+    if (!mDevice) return;
+    mDevice->BeginScene();
+    // Clear both colour and depth at the start of every frame to prevent ghost trails.
+    mDevice->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+                   D3DCOLOR_RGBA(0, 0, 0, 255), 1.0f, 0);
 }
 
 void GfxRenderingAPIDX9FF::EndFrame() {
@@ -275,7 +292,7 @@ void GfxRenderingAPIDX9FF::OnResize() {
     pp.BackBufferHeight     = h;
     pp.EnableAutoDepthStencil = TRUE;
     pp.AutoDepthStencilFormat = D3DFMT_D24S8;
-    pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+    pp.PresentationInterval = D3DPRESENT_INTERVAL_ONE; // VSync on — limits to monitor refresh rate
 
     HRESULT hr = mDevice->Reset(&pp);
     if (FAILED(hr)) {

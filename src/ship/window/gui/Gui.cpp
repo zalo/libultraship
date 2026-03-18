@@ -222,7 +222,11 @@ void Gui::ShutDownImGui(Ship::Window* window) {
 #ifdef ENABLE_DX9
         case WindowBackend::FAST3D_DXGI_DX9:
             ImGui_ImplWin32_Shutdown();
-            ImGui_ImplDX9_Shutdown();
+            // ImGui_ImplDX9_Shutdown is called from GfxRenderingAPIDX9FF::~GfxRenderingAPIDX9FF
+            // before the device is released. Only call it here if that didn't already happen.
+            if (ImGui::GetIO().BackendRendererUserData != nullptr) {
+                ImGui_ImplDX9_Shutdown();
+            }
             break;
 #endif
     }
