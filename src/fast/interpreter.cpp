@@ -1392,6 +1392,7 @@ void Interpreter::GfxSpVertex(size_t n_vertices, size_t dest_index, const F3DVtx
             d->color.r = v->cn[0];
             d->color.g = v->cn[1];
             d->color.b = v->cn[2];
+            d->color.a = v->cn[3];
         }
 
         d->u = U;
