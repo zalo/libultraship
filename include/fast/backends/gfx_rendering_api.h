@@ -79,6 +79,10 @@ class GfxRenderingAPI {
     // world-space positions and normals in LoadedVertex. The backend is then responsible for lighting via e.g.
     // D3D9 SetLight(), giving RTX Remix the scene light information it needs for path tracing.
     virtual bool OwnsLighting() const { return false; }
+    // When true the interpreter skips CPU Gouraud and uses only ambient + SetLight().
+    // Only override to true when RTX Remix is active (gRTXRemixHardwareLighting = 1).
+    // Default false so full Gouraud runs and vertex colours are correct.
+    virtual bool RTXLightingMode() const { return false; }
     virtual void CommitLights(const RSP* rsp) {}
     // Called once per triangle batch to keep the D3D9 projection matrix in sync with the RSP.
     virtual void CommitProjection(const float pMatrix[4][4]) {}

@@ -60,6 +60,7 @@ class GfxRenderingAPIDX9FF final : public GfxRenderingAPI {
 
     // RTX Remix integration points
     bool  OwnsLighting() const override { return true; }
+    bool  RTXLightingMode() const override;
     void  CommitLights(const RSP* rsp) override;
     void  CommitProjection(const float pMatrix[4][4]) override;
 

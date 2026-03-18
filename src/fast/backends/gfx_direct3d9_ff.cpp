@@ -201,14 +201,11 @@ void GfxRenderingAPIDX9FF::Init() {
 void GfxRenderingAPIDX9FF::ResetDeviceState() {
     if (!mDevice) return;
 
-    // Lighting mode:
-    //   Default (RTX_REMIX_LIGHTING=0): D3D9 T&L disabled — use pre-computed CPU vertex colors
-    //     (Gouraud shading computed by the interpreter). Game looks correct immediately.
-    //   RTX Remix mode (RTX_REMIX_LIGHTING=1): D3D9 T&L enabled — scene lights forwarded via
-    //     SetLight() so RTX Remix can path-trace them. Game may look dark without Remix active.
-    bool rtxLighting = Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger(
-        "gRTXRemixHardwareLighting", 0) != 0;
-    mDevice->SetRenderState(D3DRS_LIGHTING,              rtxLighting ? TRUE : FALSE);
+    // D3D9 T&L lighting is off by default: the interpreter computes full Gouraud shading and
+    // stores it in vertex diffuse. D3DRS_LIGHTING=FALSE passes those colours through unchanged.
+    // When gRTXRemixHardwareLighting=1, the interpreter skips Gouraud and we enable D3D9's
+    // T&L so SetLight() scene data is visible to RTX Remix.
+    mDevice->SetRenderState(D3DRS_LIGHTING,              RTXLightingMode() ? TRUE : FALSE);
     mDevice->SetRenderState(D3DRS_NORMALIZENORMALS,      TRUE);
     mDevice->SetRenderState(D3DRS_SPECULARENABLE,        FALSE);
     mDevice->SetRenderState(D3DRS_AMBIENT,               D3DCOLOR_ARGB(255, 0, 0, 0));
@@ -306,6 +303,14 @@ void GfxRenderingAPIDX9FF::OnResize() {
     UINT vbSize = 256 * 3 * sizeof(VertexD3D9FF);
     mDevice->CreateVertexBuffer(vbSize, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
                                 D3D9FF_FVF, D3DPOOL_DEFAULT, &mVertexBuffer, nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// RTXLightingMode — true only when the user enables RTX Remix hardware lighting
+// ---------------------------------------------------------------------------
+bool GfxRenderingAPIDX9FF::RTXLightingMode() const {
+    return Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger(
+        "gRTXRemixHardwareLighting", 0) != 0;
 }
 
 // ---------------------------------------------------------------------------

@@ -1256,22 +1256,24 @@ void Interpreter::GfxSpVertex(size_t n_vertices, size_t dest_index, const F3DVtx
         short V = v->tc[1] * mRsp->texture_scaling_factor.t >> 16;
 
         if (mRapi->OwnsLighting()) {
-            // RT mode: pass raw normals and world-space position to the backend; skip CPU lighting.
-            // Store object-space normal (int8 → float) in the loaded vertex for the VBO builder.
+            // Always store world-space position and normal for the D3D9 world-space VBO format.
             d->nx = vn->n[0] / 127.0f;
             d->ny = vn->n[1] / 127.0f;
             d->nz = vn->n[2] / 127.0f;
             d->wx = world_pos[0];
             d->wy = world_pos[1];
             d->wz = world_pos[2];
-            // Use ambient color so untextured geometry has a plausible fallback shade.
+        }
+
+        // RTX Remix lighting mode: skip full Gouraud, use only ambient + SetLight() for Remix.
+        // Default (RTXLightingMode=false): fall through to the normal CPU Gouraud path below.
+        if (mRapi->OwnsLighting() && mRapi->RTXLightingMode()) {
             if (mRsp->geometry_mode & G_LIGHTING) {
                 const auto& amb = mRsp->current_lights[mRsp->current_num_lights - 1].l;
                 d->color.r = amb.col[0];
                 d->color.g = amb.col[1];
                 d->color.b = amb.col[2];
                 d->color.a = v->cn[3];
-                // Notify the backend about scene lights whenever they change.
                 if (mRsp->lights_changed) {
                     mRapi->CommitLights(mRsp);
                     mRsp->lights_changed = false;
@@ -1353,6 +1355,7 @@ void Interpreter::GfxSpVertex(size_t n_vertices, size_t dest_index, const F3DVtx
             d->color.r = r > 255 ? 255 : r;
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
+            d->color.a = v->cn[3]; // Alpha always from vertex; not modified by directional lighting.
 
             if (mRsp->geometry_mode & G_TEXTURE_GEN) {
                 float dotx = 0, doty = 0;
