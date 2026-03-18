@@ -749,6 +749,10 @@ static uint64_t qpc_to_100ns(uint64_t qpc) {
 }
 
 bool GfxWindowBackendDXGI::IsFrameReady() {
+    // D3D9 backend manages its own swap chain — no DXGI swap chain exists, always report ready.
+    if (!swap_chain) {
+        return true;
+    }
     DXGI_FRAME_STATISTICS stats;
     if (swap_chain->GetFrameStatistics(&stats) == S_OK &&
         (stats.SyncRefreshCount != 0 || stats.SyncQPCTime.QuadPart != 0ULL)) {
@@ -875,6 +879,10 @@ bool GfxWindowBackendDXGI::IsFrameReady() {
 }
 
 void GfxWindowBackendDXGI::SwapBuffersBegin() {
+    // D3D9 backend calls IDirect3DDevice9::Present() in its own EndFrame() — skip DXGI swap chain work.
+    if (!swap_chain) {
+        return;
+    }
     // mLengthInVsyncFrames (now mVsyncEnabled) was used as present interval. Present interval >1 (aka fractional
     // V-Sync) breaks VRR and introduces even more input lag than capping via normal V-Sync does. Get the present
     // interval the user wants instead (V-Sync toggle).
@@ -916,6 +924,10 @@ void GfxWindowBackendDXGI::SwapBuffersBegin() {
 }
 
 void GfxWindowBackendDXGI::SwapBuffersEnd() {
+    // D3D9 backend manages its own present — no DXGI swap chain work needed.
+    if (!swap_chain) {
+        return;
+    }
     LARGE_INTEGER t0, t1, t2;
     QueryPerformanceCounter(&t0);
     QueryPerformanceCounter(&t1);
