@@ -1065,6 +1065,10 @@ void Gui::LoadGuiTexture(const std::string& name, const std::string& path, const
     const auto res =
         static_cast<Fast::Texture*>(Context::GetInstance()->GetResourceManager()->LoadResource(path, true).get());
 
+    if (res == nullptr) {
+        SPDLOG_WARN("Gui::LoadGuiTexture: texture not found in archive: {}", path);
+        return;
+    }
     LoadGuiTexture(name, *res, tint);
 }
 
