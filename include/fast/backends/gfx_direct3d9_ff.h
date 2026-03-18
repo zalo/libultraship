@@ -11,8 +11,6 @@
 
 namespace Fast {
 
-struct ShaderProgram;
-
 // Lightweight texture-stage-state snapshot derived from a N64 color combiner key.
 struct TSSConfig {
     DWORD colorOp0, colorArg1_0, colorArg2_0;
@@ -24,7 +22,9 @@ struct TSSConfig {
     D3DCOLOR textureFactor;
 };
 
-struct ShaderProgramD3D9FF : ShaderProgram {
+// D3D backends don't inherit from ShaderProgram (which has GL-specific fields).
+// Like GfxRenderingAPIDX11, we store our own struct and C-style cast to ShaderProgram*.
+struct ShaderProgramD3D9FF {
     uint64_t  shaderId0;
     uint32_t  shaderId1;
     uint8_t   numInputs;
@@ -109,27 +109,24 @@ class GfxRenderingAPIDX9FF final : public GfxRenderingAPI {
     std::unordered_map<std::pair<float, float>, uint16_t, hash_pair_ff>
     GetPixelDepth(int fbId, const std::set<std::pair<float, float>>& coordinates) override;
 
-    void*       GetFramebufferTextureId(int fbId) override;
-    void        SetTextureFilter(FilteringMode mode) override;
+    void*         GetFramebufferTextureId(int fbId) override;
+    void          SetTextureFilter(FilteringMode mode) override;
     FilteringMode GetTextureFilter() override;
-    void        SetSrgbMode() override;
-    ImTextureID GetTextureById(int id) override;
+    void          SetSrgbMode() override;
+    ImTextureID   GetTextureById(int id) override;
 
-    // Accessor for ImGui integration
     IDirect3DDevice9* GetDevice() const { return mDevice; }
 
   private:
-    // Helpers
     void ApplyTSSConfig(const TSSConfig& tss);
-    void SetD3D9SamplerState(int slot, bool linearFilter, uint32_t cms, uint32_t cmt);
     TSSConfig BuildTSSFromCC(uint64_t shaderId0, uint32_t shaderId1, bool& outAlpha, bool outUsedTex[2]);
     void ResetDeviceState();
 
     GfxWindowBackendDXGI* mWindowBackend = nullptr;
 
-    HMODULE             mD3D9Module = nullptr;
-    IDirect3D9*         mD3D        = nullptr;
-    IDirect3DDevice9*   mDevice     = nullptr;
+    HMODULE               mD3D9Module   = nullptr;
+    IDirect3D9*           mD3D          = nullptr;
+    IDirect3DDevice9*     mDevice       = nullptr;
     IDirect3DVertexBuffer9* mVertexBuffer = nullptr;
 
     std::vector<TextureD3D9>     mTextures;
@@ -138,19 +135,15 @@ class GfxRenderingAPIDX9FF final : public GfxRenderingAPI {
     std::map<std::pair<uint64_t, uint32_t>, ShaderProgramD3D9FF> mShaderPool;
     ShaderProgramD3D9FF* mCurrentProgram = nullptr;
 
-    uint32_t mCurrentTextureIds[2] = {};
-    int      mCurrentFramebuffer   = 0;
-    int32_t  mRenderTargetHeight   = 480;
-    int      mPrevLightCount       = 0;
-    FilteringMode mFilterMode      = FILTER_THREE_POINT;
+    uint32_t      mCurrentTextureIds[2] = {};
+    int           mCurrentFramebuffer   = 0;
+    int32_t       mRenderTargetHeight   = 480;
+    int           mPrevLightCount       = 0;
+    FilteringMode mFilterMode           = FILTER_THREE_POINT;
+    bool          mAlphaBlend           = false;
 
-    // Track whether alpha blending is currently enabled so we only call SetRenderState when it changes.
-    bool mAlphaBlend = false;
-
-    // Cached projection matrix (set from RSP->P_matrix via CommitProjection).
-    // Applied in DrawTriangles to keep D3D9's projection in sync with the RSP.
     float mCachedPMatrix[4][4] = {};
-    bool  mPMatrixDirty = true;
+    bool  mPMatrixDirty        = true;
 };
 
 } // namespace Fast

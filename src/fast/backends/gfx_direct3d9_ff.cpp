@@ -23,15 +23,28 @@
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <map>
+#include <vector>
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <wrl/client.h>
+#include <dxgi1_3.h>
 #include <d3d9.h>
 
-#include "fast/backends/gfx_direct3d9_ff.h"
+#ifndef _LANGUAGE_C
+#define _LANGUAGE_C
+#endif
+
+#include "fast/backends/gfx_window_manager_api.h"
+#include "fast/backends/gfx_rendering_api.h"
+
+#define DECLARE_GFX_DXGI_FUNCTIONS
 #include "fast/backends/gfx_dxgi.h"
+
+#include "fast/backends/gfx_direct3d9_ff.h"
 #include "fast/interpreter.h"
 #include "ship/Context.h"
+#include "ship/window/Window.h"
 #include "ship/window/gui/Gui.h"
 #include "spdlog/spdlog.h"
 #include <imgui_impl_dx9.h>
@@ -72,7 +85,7 @@ static inline void SetSamplerAddressMode(IDirect3DDevice9* dev, DWORD slot, DWOR
     if (cm & 2 /*G_TX_MIRROR*/) mode = D3DTADDRESS_MIRROR;
     else if (cm & 1 /*G_TX_CLAMP*/) mode = D3DTADDRESS_CLAMP;
     else mode = D3DTADDRESS_WRAP;
-    dev->SetSamplerState(slot, uOrV, mode);
+    dev->SetSamplerState(slot, (D3DSAMPLERSTATETYPE)uOrV, mode);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,22 +435,22 @@ ShaderProgram* GfxRenderingAPIDX9FF::CreateAndLoadNewShader(uint64_t shaderId0, 
     prog.usedTextures[1] = outUsed[1];
     prog.numInputs  = 0;
     mCurrentProgram = &prog;
-    return &prog;
+    return (ShaderProgram*)&prog;
 }
 
 ShaderProgram* GfxRenderingAPIDX9FF::LookupShader(uint64_t shaderId0, uint32_t shaderId1) {
     auto it = mShaderPool.find(std::make_pair(shaderId0, (uint32_t)shaderId1));
-    return (it != mShaderPool.end()) ? &it->second : nullptr;
+    return (it != mShaderPool.end()) ? (ShaderProgram*)&it->second : nullptr;
 }
 
 void GfxRenderingAPIDX9FF::LoadShader(ShaderProgram* newPrg) {
-    mCurrentProgram = static_cast<ShaderProgramD3D9FF*>(newPrg);
+    mCurrentProgram = (ShaderProgramD3D9FF*)newPrg;
 }
 
 void GfxRenderingAPIDX9FF::UnloadShader(ShaderProgram*) {}
 
 void GfxRenderingAPIDX9FF::ShaderGetInfo(ShaderProgram* prg, uint8_t* numInputs, bool usedTextures[2]) {
-    auto* p = static_cast<ShaderProgramD3D9FF*>(prg);
+    auto* p = (ShaderProgramD3D9FF*)prg;
     *numInputs       = p ? p->numInputs       : 0;
     usedTextures[0]  = p ? p->usedTextures[0] : false;
     usedTextures[1]  = p ? p->usedTextures[1] : false;
