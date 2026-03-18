@@ -8,6 +8,7 @@
 
 namespace Fast {
 struct ShaderProgram;
+struct RSP;
 
 struct GfxClipParameters {
     bool z_is_from_0_to_1;
@@ -72,6 +73,15 @@ class GfxRenderingAPI {
     virtual FilteringMode GetTextureFilter() = 0;
     virtual void SetSrgbMode() = 0;
     virtual ImTextureID GetTextureById(int id) = 0;
+
+    // RTX / GPU-lighting extensions. Default implementations are no-ops so existing backends are unaffected.
+    // When OwnsLighting() returns true the interpreter skips CPU-side Gouraud shading and instead stores raw
+    // world-space positions and normals in LoadedVertex. The backend is then responsible for lighting via e.g.
+    // D3D9 SetLight(), giving RTX Remix the scene light information it needs for path tracing.
+    virtual bool OwnsLighting() const { return false; }
+    virtual void CommitLights(const RSP* rsp) {}
+    // Called once per triangle batch to keep the D3D9 projection matrix in sync with the RSP.
+    virtual void CommitProjection(const float pMatrix[4][4]) {}
 
   protected:
     int8_t mCurrentDepthTest = 0;

@@ -11,6 +11,7 @@
 #include "fast/backends/gfx_metal.h"
 #include "fast/backends/gfx_direct3d_common.h"
 #include "fast/backends/gfx_direct3d11.h"
+#include "fast/backends/gfx_direct3d9_ff.h"
 #include "fast/backends/gfx_window_manager_api.h"
 
 #include <fstream>
@@ -28,6 +29,9 @@ Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui, std::shared_ptr<FastM
 
 #ifdef _WIN32
     AddAvailableWindowBackend(Ship::WindowBackend::FAST3D_DXGI_DX11);
+#endif
+#ifdef ENABLE_DX9
+    AddAvailableWindowBackend(Ship::WindowBackend::FAST3D_DXGI_DX9);
 #endif
 #ifdef __APPLE__
     if (Metal_IsSupported()) {
@@ -135,6 +139,12 @@ void Fast3dWindow::InitWindowManager() {
         case Ship::WindowBackend::FAST3D_DXGI_DX11:
             mWindowManagerApi = new GfxWindowBackendDXGI();
             mRenderingApi = new GfxRenderingAPIDX11(static_cast<GfxWindowBackendDXGI*>(mWindowManagerApi));
+            break;
+#endif
+#ifdef ENABLE_DX9
+        case Ship::WindowBackend::FAST3D_DXGI_DX9:
+            mWindowManagerApi = new GfxWindowBackendDXGI();
+            mRenderingApi = new GfxRenderingAPIDX9FF(static_cast<GfxWindowBackendDXGI*>(mWindowManagerApi));
             break;
 #endif
 #ifdef ENABLE_OPENGL

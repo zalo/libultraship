@@ -195,8 +195,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
         _CONSOLE
         _CRT_SECURE_NO_WARNINGS
         ENABLE_DX11
+        ENABLE_DX9
         NOMINMAX
     )
+    target_link_libraries(${PROJECT_NAME} PRIVATE d3d9)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")

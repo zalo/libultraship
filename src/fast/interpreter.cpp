@@ -1243,7 +1243,7 @@ void Interpreter::GfxSpVertex(size_t n_vertices, size_t dest_index, const F3DVtx
                   v->ob[2] * mRsp->MP_matrix[2][3] + mRsp->MP_matrix[3][3];
 
         float world_pos[3] = { 0.0 };
-        if (mRsp->geometry_mode & G_LIGHTING_POSITIONAL) {
+        if ((mRsp->geometry_mode & G_LIGHTING_POSITIONAL) || mRapi->OwnsLighting()) {
             float(*mtx)[4] = mRsp->modelview_matrix_stack[mRsp->modelview_matrix_stack_size - 1];
             world_pos[0] = v->ob[0] * mtx[0][0] + v->ob[1] * mtx[1][0] + v->ob[2] * mtx[2][0] + mtx[3][0];
             world_pos[1] = v->ob[0] * mtx[0][1] + v->ob[1] * mtx[1][1] + v->ob[2] * mtx[2][1] + mtx[3][1];
@@ -1255,7 +1255,34 @@ void Interpreter::GfxSpVertex(size_t n_vertices, size_t dest_index, const F3DVtx
         short U = v->tc[0] * mRsp->texture_scaling_factor.s >> 16;
         short V = v->tc[1] * mRsp->texture_scaling_factor.t >> 16;
 
-        if (mRsp->geometry_mode & G_LIGHTING) {
+        if (mRapi->OwnsLighting()) {
+            // RT mode: pass raw normals and world-space position to the backend; skip CPU lighting.
+            // Store object-space normal (int8 → float) in the loaded vertex for the VBO builder.
+            d->nx = vn->n[0] / 127.0f;
+            d->ny = vn->n[1] / 127.0f;
+            d->nz = vn->n[2] / 127.0f;
+            d->wx = world_pos[0];
+            d->wy = world_pos[1];
+            d->wz = world_pos[2];
+            // Use ambient color so untextured geometry has a plausible fallback shade.
+            if (mRsp->geometry_mode & G_LIGHTING) {
+                const auto& amb = mRsp->current_lights[mRsp->current_num_lights - 1].l;
+                d->color.r = amb.col[0];
+                d->color.g = amb.col[1];
+                d->color.b = amb.col[2];
+                d->color.a = v->cn[3];
+                // Notify the backend about scene lights whenever they change.
+                if (mRsp->lights_changed) {
+                    mRapi->CommitLights(mRsp);
+                    mRsp->lights_changed = false;
+                }
+            } else {
+                d->color.r = v->cn[0];
+                d->color.g = v->cn[1];
+                d->color.b = v->cn[2];
+                d->color.a = v->cn[3];
+            }
+        } else if (mRsp->geometry_mode & G_LIGHTING) {
             if (mRsp->lights_changed) {
                 for (int i = 0; i < mRsp->current_num_lights - 1; i++) {
                     CalculateNormalDir(&mRsp->current_lights[i].l, mRsp->current_lights_coeffs[i]);
@@ -1581,7 +1608,7 @@ void Interpreter::GfxSpTri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx
     ColorCombiner* comb = LookupOrCreateColorCombiner(key);
 
     uint32_t tm = 0;
-    uint32_t tex_width[2], tex_height[2], tex_width2[2], tex_height2[2];
+    uint32_t tex_width[2] = {}, tex_height[2] = {}, tex_width2[2] = {}, tex_height2[2] = {};
 
     for (int i = 0; i < 2; i++) {
         uint32_t tile = mRdp->first_tile_index + i;
@@ -1684,6 +1711,53 @@ void Interpreter::GfxSpTri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx
     mRapi->ShaderGetInfo(prg, &numInputs, usedTextures);
 
     struct GfxClipParameters clip_parameters = mRapi->GetClipParameters();
+
+    // D3D9 fixed-function / RTX Remix path: emit world-space geometry and normals.
+    if (mRapi->OwnsLighting()) {
+        // Keep the backend's D3D projection matrix in sync with the current RSP P_matrix.
+        mRapi->CommitProjection(mRsp->P_matrix);
+        for (int i = 0; i < 3; i++) {
+            mBufVbo[mBufVboLen++] = v_arr[i]->wx;
+            mBufVbo[mBufVboLen++] = v_arr[i]->wy;
+            mBufVbo[mBufVboLen++] = v_arr[i]->wz;
+            mBufVbo[mBufVboLen++] = v_arr[i]->nx;
+            mBufVbo[mBufVboLen++] = v_arr[i]->ny;
+            mBufVbo[mBufVboLen++] = v_arr[i]->nz;
+            mBufVbo[mBufVboLen++] = v_arr[i]->color.r / 255.0f;
+            mBufVbo[mBufVboLen++] = v_arr[i]->color.g / 255.0f;
+            mBufVbo[mBufVboLen++] = v_arr[i]->color.b / 255.0f;
+            mBufVbo[mBufVboLen++] = v_arr[i]->color.a / 255.0f;
+            // UV for texture 0 (normalised).
+            float u_coord = v_arr[i]->u / 32.0f;
+            float v_coord = v_arr[i]->v / 32.0f;
+            if (comb->usedTextures[0] && tex_width[0] > 0) {
+                int shifts = mRdp->texture_tile[mRdp->first_tile_index].shifts;
+                int shiftt = mRdp->texture_tile[mRdp->first_tile_index].shiftt;
+                if (shifts != 0) {
+                    if (shifts <= 10) u_coord /= 1 << shifts;
+                    else u_coord *= 1 << (16 - shifts);
+                }
+                if (shiftt != 0) {
+                    if (shiftt <= 10) v_coord /= 1 << shiftt;
+                    else v_coord *= 1 << (16 - shiftt);
+                }
+                u_coord -= mRdp->texture_tile[mRdp->first_tile_index].uls / 4.0f;
+                v_coord -= mRdp->texture_tile[mRdp->first_tile_index].ult / 4.0f;
+                if ((mRdp->other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT && !is_rect) {
+                    u_coord += 0.5f;
+                    v_coord += 0.5f;
+                }
+                u_coord /= (float)tex_width[0];
+                v_coord /= (float)tex_height[0];
+            }
+            mBufVbo[mBufVboLen++] = u_coord;
+            mBufVbo[mBufVboLen++] = v_coord;
+        }
+        if (++mBufVboNumTris == MAX_TRI_BUFFER) {
+            Flush();
+        }
+        return;
+    }
 
     for (int i = 0; i < 3; i++) {
         float z = v_arr[i]->z, w = v_arr[i]->w;

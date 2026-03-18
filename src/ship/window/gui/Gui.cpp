@@ -52,6 +52,16 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARA
 
 #endif
 
+#ifdef ENABLE_DX9
+#include <d3d9.h>
+#include <imgui_impl_dx9.h>
+// imgui_impl_win32.h already included above when ENABLE_DX11 is set; guard against re-declaration.
+#if !defined(ENABLE_DX11) && !defined(ENABLE_DX12)
+#include <imgui_impl_win32.h>
+IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
+#endif
+
 namespace Ship {
 #define TOGGLE_BTN ImGuiKey_F1
 #define TOGGLE_PAD_BTN ImGuiKey_GamepadBack
@@ -179,6 +189,11 @@ void Gui::ImGuiWMInit() {
             ImGui_ImplWin32_Init(mImpl.Dx11.Window);
             break;
 #endif
+#ifdef ENABLE_DX9
+        case WindowBackend::FAST3D_DXGI_DX9:
+            ImGui_ImplWin32_Init(mImpl.Dx11.Window);
+            break;
+#endif
         default:
             break;
     }
@@ -202,6 +217,12 @@ void Gui::ShutDownImGui(Ship::Window* window) {
         case WindowBackend::FAST3D_DXGI_DX11:
             ImGui_ImplWin32_Shutdown();
             ImGui_ImplDX11_Shutdown();
+            break;
+#endif
+#ifdef ENABLE_DX9
+        case WindowBackend::FAST3D_DXGI_DX9:
+            ImGui_ImplWin32_Shutdown();
+            ImGui_ImplDX9_Shutdown();
             break;
 #endif
     }
@@ -236,6 +257,11 @@ void Gui::ImGuiBackendInit() {
         case WindowBackend::FAST3D_DXGI_DX11:
             ImGui_ImplDX11_Init(static_cast<ID3D11Device*>(mImpl.Dx11.Device),
                                 static_cast<ID3D11DeviceContext*>(mImpl.Dx11.DeviceContext));
+            break;
+#endif
+#ifdef ENABLE_DX9
+        case WindowBackend::FAST3D_DXGI_DX9:
+            ImGui_ImplDX9_Init(static_cast<IDirect3DDevice9*>(mImpl.Dx11.Device));
             break;
 #endif
         default:
@@ -277,6 +303,7 @@ bool Gui::SupportsViewports() {
 
     switch (Context::GetInstance()->GetWindow()->GetWindowBackend()) {
         case WindowBackend::FAST3D_DXGI_DX11:
+        case WindowBackend::FAST3D_DXGI_DX9:
             return true;
         case WindowBackend::FAST3D_SDL_OPENGL:
         case WindowBackend::FAST3D_SDL_METAL:
@@ -315,8 +342,9 @@ void Gui::HandleWindowEvents(WindowEvent event) {
             }
 #endif
             break;
-#ifdef ENABLE_DX11
+#if defined(ENABLE_DX11) || defined(ENABLE_DX9)
         case WindowBackend::FAST3D_DXGI_DX11:
+        case WindowBackend::FAST3D_DXGI_DX9:
             ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(event.Win32.Handle), event.Win32.Msg, event.Win32.Param1,
                                            event.Win32.Param2);
             break;
@@ -368,6 +396,12 @@ void Gui::ImGuiBackendNewFrame() {
             break;
 #endif
 
+#ifdef ENABLE_DX9
+        case WindowBackend::FAST3D_DXGI_DX9:
+            ImGui_ImplDX9_NewFrame();
+            break;
+#endif
+
 #ifdef __APPLE__
         case WindowBackend::FAST3D_SDL_METAL: {
             Fast::GfxRenderingAPIMetal* api =
@@ -388,8 +422,9 @@ void Gui::ImGuiWMNewFrame() {
         case WindowBackend::FAST3D_SDL_METAL:
             ImGui_ImplSDL2_NewFrame();
             break;
-#ifdef ENABLE_DX11
+#if defined(ENABLE_DX11) || defined(ENABLE_DX9)
         case WindowBackend::FAST3D_DXGI_DX11:
+        case WindowBackend::FAST3D_DXGI_DX9:
             ImGui_ImplWin32_NewFrame();
             break;
 #endif
@@ -844,6 +879,12 @@ void Gui::ImGuiRenderDrawData(ImDrawData* data) {
 #ifdef ENABLE_DX11
         case WindowBackend::FAST3D_DXGI_DX11:
             ImGui_ImplDX11_RenderDrawData(data);
+            break;
+#endif
+
+#ifdef ENABLE_DX9
+        case WindowBackend::FAST3D_DXGI_DX9:
+            ImGui_ImplDX9_RenderDrawData(data);
             break;
 #endif
         default:

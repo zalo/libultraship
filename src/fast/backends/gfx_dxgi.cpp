@@ -1,4 +1,4 @@
-#if defined(ENABLE_DX11) || defined(ENABLE_DX12)
+#if defined(ENABLE_DX11) || defined(ENABLE_DX12) || defined(ENABLE_DX9)
 
 #include <stdint.h>
 #include <math.h>

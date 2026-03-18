@@ -209,6 +209,10 @@ struct LoadedVertex {
     float u, v;
     struct RGBA color;
     uint8_t clip_rej;
+    // RT-mode extras: world-space position and object-space normal.
+    // Populated by GfxSpVertex when the active backend returns OwnsLighting() == true.
+    float wx, wy, wz;
+    float nx, ny, nz;
 };
 
 struct RawTexMetadata {
